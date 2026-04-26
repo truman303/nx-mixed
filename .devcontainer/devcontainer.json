@@ -27,7 +27,7 @@
 	//			"protocol": "https"
 	//		}
 	// }
-	"forwardPorts": [4200]
+	"forwardPorts": [4200, 5039]
 
     // Use 'postCreateCommand' to run commands after the container is created.
     // "postCreateCommand": "dotnet --info",

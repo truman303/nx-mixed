@@ -11,7 +11,17 @@
 To run the dev server for your app, use:
 
 ```sh
+# start angular app
 npx nx serve demo-app
+
+# start dotnet app - use of `run` instead of `serve`
+npx nx run demo-dotnet-api
+
+# start multiple apps
+npx nx run-many -t serve watch
+
+# start specific apps
+npx nx run-many -t serve watch -p demo-app demo-dotnet-api
 ```
 
 To create a production bundle:

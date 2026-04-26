@@ -46,3 +46,8 @@ Thumbs.db
 .angular
 
 __screenshots__/
+
+# .NET
+**/bin/
+**/obj/
+/artifacts/
