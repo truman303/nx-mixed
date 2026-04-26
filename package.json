@@ -2,7 +2,9 @@
   "name": "@nx-mixed/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+    "demo": "nx run-many -t serve watch -p demo-app demo-dotnet-api"
+  },
   "private": true,
   "dependencies": {
     "@angular/common": "~21.2.0",
