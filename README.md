@@ -22,6 +22,10 @@ npx nx run-many -t serve watch
 
 # start specific apps
 npx nx run-many -t serve watch -p demo-app demo-dotnet-api
+
+# a shortcut to above command - a custom script in package.json is defined as `demo`
+npm run demo
+
 ```
 
 To create a production bundle:
