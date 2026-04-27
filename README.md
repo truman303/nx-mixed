@@ -1,115 +1,157 @@
 # NxMixed
 
-<a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
+An [Nx](https://nx.dev) workspace that mixes **Angular** and **.NET** projects under one task graph. Use Nx for orchestration, caching, and `affected` detection across both stacks.
 
-✨ Your new, shiny [Nx workspace](https://nx.dev) is ready ✨.
+## Layout
 
-[Learn more about this workspace setup and its capabilities](https://nx.dev/getting-started/tutorials/angular-monorepo-tutorial?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects) or run `npx nx graph` to visually explore what was created. Now, let's get you up to speed!
+```text
+apps/
+  demo-app/                  # Angular 21 (port 4200)
+  demo-dotnet-api/           # ASP.NET minimal API (port 5039) → references Demo.Domain
+libs/
+  web/
+    shared-ui/               # Angular lib, imported via @nx-mixed/shared-ui
+  dotnet/
+    Demo.Domain/             # .NET classlib, holds shared records (e.g. WeatherForecast)
+```
 
-## Run tasks
+Existing edges (verify with `npx nx graph`):
 
-To run the dev server for your app, use:
+- `demo-app` → `shared-ui` (TypeScript import via the `@nx-mixed/shared-ui` path alias)
+- `demo-dotnet-api` → `Demo.Domain` (MSBuild `<ProjectReference>`)
+
+The two stacks **cannot import each other directly**. The boundary is HTTP (see [Cross‑stack](#cross-stack-angular-↔-net)).
+
+## Daily commands
 
 ```sh
-# start angular app
-npx nx serve demo-app
-
-# start dotnet app - use of `run` instead of `serve`
-npx nx run demo-dotnet-api
-
-# start multiple apps
-npx nx run-many -t serve watch
-
-# start specific apps
-npx nx run-many -t serve watch -p demo-app demo-dotnet-api
-
-# a shortcut to above command - a custom script in package.json is defined as `demo`
+# run both apps together (script defined in package.json)
 npm run demo
 
+# individual apps
+npx nx serve demo-app                       # Angular (continuous)
+npx nx run demo-dotnet-api:watch            # .NET hot reload (continuous)
+npx nx run demo-dotnet-api:run              # .NET one-shot
+
+# anything Nx can do for a project
+npx nx show project <name>                  # list inferred + configured targets
+npx nx graph                                # visual graph of both stacks
+npx nx affected -t build test lint          # only what changed (and dependents)
+npx nx run-many -t build                    # everything, in parallel
 ```
 
-To create a production bundle:
+`@nx/dotnet` infers `build`, `restore`, `clean`, `publish`, `pack`, `watch`, `run`, `test` from each `*.csproj` — no `project.json` needed for .NET projects unless you want to override something (e.g. mark `run` as continuous).
+
+## Demo app
+
+`apps/demo-app` renders a small weather table at `http://localhost:4200/` populated by `GET /api/weatherforecast` against `apps/demo-dotnet-api`. End‑to‑end smoke test for the mixed setup. Above the table, a `<ui-shared-ui>` banner is rendered from `@nx-mixed/shared-ui` to demonstrate consumption of the Angular lib.
+
+The Angular dev server proxies `/api/*` → `http://localhost:5039` via `apps/demo-app/proxy.conf.json` (wired into the `serve` target via `options.proxyConfig`). This avoids CORS in dev; in prod, swap `/api` for an env‑driven base URL.
+
+`WeatherForecast` lives in `libs/dotnet/Demo.Domain` — moving it out of `Program.cs` proves the .NET `<ProjectReference>` chain is honored by `nx build` (which runs `Demo.Domain:build` before `demo-dotnet-api:build` via the inferred `^build` dependency).
+
+## Adding an Angular library
+
+The generator takes the **directory** as the positional argument and the project name via `--name`. It does not support `--dry-run`.
 
 ```sh
-npx nx build demo-app
+npx nx g @nx/angular:library libs/web/<name> \
+  --name=<name> \
+  --tags=scope:web,type:ui \
+  --prefix=ui \
+  --no-interactive
 ```
 
-To see all available targets to run for a project, run:
+Concrete example used in this repo:
 
 ```sh
-npx nx show project demo-app
+npx nx g @nx/angular:library libs/web/shared-ui \
+  --name=shared-ui --tags=scope:web,type:ui --prefix=ui --no-interactive
 ```
 
-These targets are either [inferred automatically](https://nx.dev/concepts/inferred-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or defined in the `project.json` or `package.json` files.
+What the generator does:
 
-[More about running tasks in the docs &raquo;](https://nx.dev/features/run-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+- Creates `libs/web/<name>/` with a `project.json`, sample standalone component, lint and test targets.
+- Adds a path alias to `tsconfig.base.json`: `"@nx-mixed/<name>": ["libs/web/<name>/src/index.ts"]`.
+- No further wiring needed — apps and other libs can `import { ... } from '@nx-mixed/<name>'` immediately. Nx infers the dependency from the import.
 
-## Add new projects
+Defaults to **non‑buildable** (consumer's bundler compiles the source). Pass `--buildable` for an own `ng-packagr` build target, or `--publishable --import-path=@your-org/<name>` for npm publishing. Default to non‑buildable unless you have a reason.
 
-While you could add new projects to your workspace manually, you might want to leverage [Nx plugins](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) and their [code generation](https://nx.dev/features/generate-code?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) feature.
+## Adding a .NET library
 
-Use the plugin's generator to create new projects.
-
-To generate a new application, use:
+`@nx/dotnet` has no library generator — use the `dotnet` CLI directly. The plugin auto‑detects on the next `nx` invocation. Pass full `.csproj` paths to `dotnet add reference` (the shorthand expects the directory to contain a single `.csproj`, which is fine but explicit paths are clearer).
 
 ```sh
-npx nx g @nx/angular:app demo
+# class library
+dotnet new classlib -o libs/dotnet/<Name> -f net10.0
+
+# test project (auto-recognized as a test project — gets a `test` target)
+dotnet new xunit -o libs/dotnet/<Name>.Tests -f net10.0
+
+# wire references (these build the Nx graph via <ProjectReference>)
+dotnet add libs/dotnet/<Name>.Tests/<Name>.Tests.csproj reference libs/dotnet/<Name>/<Name>.csproj
+dotnet add apps/demo-dotnet-api/demo-dotnet-api.csproj reference libs/dotnet/<Name>/<Name>.csproj
 ```
 
-To generate a new library, use:
+Concrete example used in this repo (the API depends on `Demo.Domain` for the `WeatherForecast` record):
 
 ```sh
-npx nx g @nx/angular:lib mylib
+dotnet new classlib -o libs/dotnet/Demo.Domain -f net10.0
+dotnet add apps/demo-dotnet-api/demo-dotnet-api.csproj reference libs/dotnet/Demo.Domain/Demo.Domain.csproj
 ```
 
-You can use `npx nx list` to get a list of installed plugins. Then, run `npx nx list <plugin-name>` to learn about more specific capabilities of a particular plugin. Alternatively, [install Nx Console](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) to browse plugins and generators in your IDE.
+Verify: `npx nx graph` shows the new edges, and `npx nx build demo-dotnet-api` automatically runs `Demo.Domain:build` first via the inferred `^build` dependency.
 
-[Learn more about Nx plugins &raquo;](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) | [Browse the plugin registry &raquo;](https://nx.dev/plugin-registry?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+Optional but recommended:
 
-## Set up CI!
+- Add a root `.sln` (`dotnet new sln && dotnet sln add **/*.csproj`) so IDEs and `dotnet build NxMixed.sln` work without thinking. Nx itself doesn't need it.
+- Add a root `Directory.Packages.props` with `<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>` to pin NuGet versions across the repo.
+- Drop a tiny `project.json` next to a `.csproj` only when you need to add tags or override an inferred target — it merges with the inferred config.
 
-### Step 1
+## Cross‑stack (Angular ↔ .NET)
 
-To connect to Nx Cloud, run the following command:
+You cannot share code between TypeScript and C#. Three options, increasing in robustness:
+
+1. **Hand‑mirrored DTOs** — what the demo app does today (an interface in TS that matches the C# record). Fine for a few endpoints; drifts.
+2. **OpenAPI codegen** — `Program.cs` already calls `AddOpenApi()`. Generate a typed TS client (e.g. `openapi-typescript`) into a `libs/web/api-client` lib whose `generate` target `dependsOn: ["demo-dotnet-api:build"]`. Apps then import from `@nx-mixed/api-client`.
+3. **Shared OpenAPI doc in git** — variant of (2) with the spec checked in; simpler graph, slower drift detection.
+
+## Module boundaries
+
+The `@nx/eslint` plugin is already set up. As soon as you have ≥2 libs, add an `enforce-module-boundaries` rule to the root ESLint config and tag every project. Suggested taxonomy:
+
+```jsonc
+"tags": ["scope:web",    "type:ui"]            // libs/web/shared-ui
+"tags": ["scope:web",    "type:data-access"]   // libs/web/api-client
+"tags": ["scope:dotnet", "type:domain"]        // libs/dotnet/Demo.Domain
+"tags": ["scope:app"]                          // apps/*
+```
+
+The .NET side is naturally isolated (no import path crosses the runtime boundary), but tagging keeps `nx graph` readable and lets you write rules like *"`scope:web` cannot depend on `scope:dotnet`"* for symmetry.
+
+## Generators & plugins
 
 ```sh
-npx nx connect
+npx nx list                  # installed plugins
+npx nx list @nx/angular      # generators + executors for a plugin
+npx nx add <plugin>          # install a new plugin
 ```
 
-Connecting to Nx Cloud ensures a [fast and scalable CI](https://nx.dev/ci/intro/why-nx-cloud?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) pipeline. It includes features such as:
+Available out of the box: `@nx/angular`, `@nx/dotnet`, `@nx/eslint`, `@nx/playwright`, `@nx/js`, `@nx/web`, `@nx/workspace`.
 
-- [Remote caching](https://nx.dev/ci/features/remote-cache?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task distribution across multiple machines](https://nx.dev/ci/features/distribute-task-execution?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Automated e2e test splitting](https://nx.dev/ci/features/split-e2e-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task flakiness detection and rerunning](https://nx.dev/ci/features/flaky-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-### Step 2
-
-Use the following command to configure a CI workflow for your workspace:
+## CI
 
 ```sh
-npx nx g ci-workflow
+npx nx connect            # optional: Nx Cloud (remote cache, distribution, flaky detection)
+npx nx g ci-workflow      # generate a CI workflow for your provider
 ```
 
-[Learn more about Nx on CI](https://nx.dev/ci/intro/ci-with-nx#ready-get-started-with-your-provider?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Install Nx Console
-
-Nx Console is an editor extension that enriches your developer experience. It lets you run tasks, generate code, and improves code autocompletion in your IDE. It is available for VSCode and IntelliJ.
-
-[Install Nx Console &raquo;](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+Use `npx nx affected -t build test lint` in CI to only run what changed.
 
 ## Useful links
 
-Learn more:
-
-- [Learn more about this workspace setup](https://nx.dev/getting-started/tutorials/angular-monorepo-tutorial?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects)
-- [Learn about Nx on CI](https://nx.dev/ci/intro/ci-with-nx?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Releasing Packages with Nx release](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [What are Nx plugins?](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-And join the Nx community:
-- [Discord](https://go.nx.dev/community)
-- [Follow us on X](https://twitter.com/nxdevtools) or [LinkedIn](https://www.linkedin.com/company/nrwl)
-- [Our Youtube channel](https://www.youtube.com/@nxdevtools)
-- [Our blog](https://nx.dev/blog?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+- [Nx .NET plugin docs](https://nx.dev/docs/technologies/dotnet/introduction)
+- [Nx Angular plugin docs](https://nx.dev/technologies/angular)
+- [Run tasks](https://nx.dev/features/run-tasks) · [Inferred tasks](https://nx.dev/concepts/inferred-tasks) · [Module boundaries](https://nx.dev/features/enforce-module-boundaries)
+- [Nx Console (VSCode / JetBrains)](https://nx.dev/getting-started/editor-setup)
+- Community: [Discord](https://go.nx.dev/community) · [Blog](https://nx.dev/blog) · [YouTube](https://www.youtube.com/@nxdevtools)
