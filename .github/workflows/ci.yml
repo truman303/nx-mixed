@@ -32,7 +32,7 @@ jobs:
       # Connect the workspace first with `npx nx connect` (writes nxCloudId
       # to nx.json), then uncomment the line below.
       # Docs: https://nx.dev/ci/reference/nx-cloud-cli#npx-nxcloud-startcirun
-      # - run: npx nx start-ci-run --distribute-on="3 linux-medium-js" --stop-agents-after="e2e-ci"
+      - run: npx nx start-ci-run --distribute-on="3 linux-medium-js" --stop-agents-after="e2e-ci"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
