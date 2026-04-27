@@ -6,12 +6,19 @@ An [Nx](https://nx.dev) workspace that mixes **Angular** and **.NET** projects u
 
 ```text
 apps/
-  demo-app/                 # Angular 21 (port 4200)
-  demo-dotnet-api/          # ASP.NET minimal API (port 5039)
+  demo-app/                  # Angular 21 (port 4200)
+  demo-dotnet-api/           # ASP.NET minimal API (port 5039) → references Demo.Domain
 libs/
-  web/<name>/               # Angular libraries (path-aliased)
-  dotnet/<Name>/             # .NET class libraries (ProjectReference-linked)
+  web/
+    shared-ui/               # Angular lib, imported via @nx-mixed/shared-ui
+  dotnet/
+    Demo.Domain/             # .NET classlib, holds shared records (e.g. WeatherForecast)
 ```
+
+Existing edges (verify with `npx nx graph`):
+
+- `demo-app` → `shared-ui` (TypeScript import via the `@nx-mixed/shared-ui` path alias)
+- `demo-dotnet-api` → `Demo.Domain` (MSBuild `<ProjectReference>`)
 
 The two stacks **cannot import each other directly**. The boundary is HTTP (see [Cross‑stack](#cross-stack-angular-↔-net)).
 
@@ -37,50 +44,63 @@ npx nx run-many -t build                    # everything, in parallel
 
 ## Demo app
 
-`apps/demo-app` renders a small weather table at `http://localhost:4200/` populated by `GET /api/weatherforecast` against `apps/demo-dotnet-api`. End‑to‑end smoke test for the mixed setup.
+`apps/demo-app` renders a small weather table at `http://localhost:4200/` populated by `GET /api/weatherforecast` against `apps/demo-dotnet-api`. End‑to‑end smoke test for the mixed setup. Above the table, a `<ui-shared-ui>` banner is rendered from `@nx-mixed/shared-ui` to demonstrate consumption of the Angular lib.
 
 The Angular dev server proxies `/api/*` → `http://localhost:5039` via `apps/demo-app/proxy.conf.json` (wired into the `serve` target via `options.proxyConfig`). This avoids CORS in dev; in prod, swap `/api` for an env‑driven base URL.
 
+`WeatherForecast` lives in `libs/dotnet/Demo.Domain` — moving it out of `Program.cs` proves the .NET `<ProjectReference>` chain is honored by `nx build` (which runs `Demo.Domain:build` before `demo-dotnet-api:build` via the inferred `^build` dependency).
+
 ## Adding an Angular library
 
+The generator takes the **directory** as the positional argument and the project name via `--name`. It does not support `--dry-run`.
+
 ```sh
-npx nx g @nx/angular:library shared-ui \
-  --directory=libs/web/shared-ui \
+npx nx g @nx/angular:library libs/web/<name> \
+  --name=<name> \
   --tags=scope:web,type:ui \
-  --no-interactive --dry-run     # drop --dry-run when output looks right
+  --prefix=ui \
+  --no-interactive
+```
+
+Concrete example used in this repo:
+
+```sh
+npx nx g @nx/angular:library libs/web/shared-ui \
+  --name=shared-ui --tags=scope:web,type:ui --prefix=ui --no-interactive
 ```
 
 What the generator does:
 
-- Creates `libs/web/shared-ui/` with a `project.json`, sample standalone component, lint and test targets.
-- Adds a path alias to `tsconfig.base.json`: `"@nx-mixed/shared-ui": ["libs/web/shared-ui/src/index.ts"]`.
-- No further wiring needed — apps and other libs can `import { ... } from '@nx-mixed/shared-ui'` immediately. Nx infers the dependency from the import.
+- Creates `libs/web/<name>/` with a `project.json`, sample standalone component, lint and test targets.
+- Adds a path alias to `tsconfig.base.json`: `"@nx-mixed/<name>": ["libs/web/<name>/src/index.ts"]`.
+- No further wiring needed — apps and other libs can `import { ... } from '@nx-mixed/<name>'` immediately. Nx infers the dependency from the import.
 
-Defaults to **non‑buildable** (consumer's bundler compiles the source). Pass `--buildable` for an own `ng-packagr` build target, or `--publishable --import-path=@your-org/shared-ui` for npm publishing. Default to non‑buildable unless you have a reason.
+Defaults to **non‑buildable** (consumer's bundler compiles the source). Pass `--buildable` for an own `ng-packagr` build target, or `--publishable --import-path=@your-org/<name>` for npm publishing. Default to non‑buildable unless you have a reason.
 
 ## Adding a .NET library
 
-`@nx/dotnet` has no library generator — use the `dotnet` CLI directly. The plugin auto‑detects on the next `nx` invocation.
+`@nx/dotnet` has no library generator — use the `dotnet` CLI directly. The plugin auto‑detects on the next `nx` invocation. Pass full `.csproj` paths to `dotnet add reference` (the shorthand expects the directory to contain a single `.csproj`, which is fine but explicit paths are clearer).
 
 ```sh
 # class library
-dotnet new classlib -o libs/dotnet/Demo.Domain -f net10.0
+dotnet new classlib -o libs/dotnet/<Name> -f net10.0
 
 # test project (auto-recognized as a test project — gets a `test` target)
-dotnet new xunit -o libs/dotnet/Demo.Domain.Tests -f net10.0
+dotnet new xunit -o libs/dotnet/<Name>.Tests -f net10.0
+
+# wire references (these build the Nx graph via <ProjectReference>)
+dotnet add libs/dotnet/<Name>.Tests/<Name>.Tests.csproj reference libs/dotnet/<Name>/<Name>.csproj
+dotnet add apps/demo-dotnet-api/demo-dotnet-api.csproj reference libs/dotnet/<Name>/<Name>.csproj
 ```
 
-Wire references with the `dotnet` CLI — `@nx/dotnet` reads `<ProjectReference>` to build the graph:
+Concrete example used in this repo (the API depends on `Demo.Domain` for the `WeatherForecast` record):
 
 ```sh
-# tests depend on the lib
-dotnet add libs/dotnet/Demo.Domain.Tests reference libs/dotnet/Demo.Domain
-
-# api depends on the lib
-dotnet add apps/demo-dotnet-api reference libs/dotnet/Demo.Domain
+dotnet new classlib -o libs/dotnet/Demo.Domain -f net10.0
+dotnet add apps/demo-dotnet-api/demo-dotnet-api.csproj reference libs/dotnet/Demo.Domain/Demo.Domain.csproj
 ```
 
-Verify it landed: `npx nx graph` should now show edges into `Demo.Domain`.
+Verify: `npx nx graph` shows the new edges, and `npx nx build demo-dotnet-api` automatically runs `Demo.Domain:build` first via the inferred `^build` dependency.
 
 Optional but recommended:
 
