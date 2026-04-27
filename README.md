@@ -141,9 +141,9 @@ Available out of the box: `@nx/angular`, `@nx/dotnet`, `@nx/eslint`, `@nx/playwr
 
 ## CI
 
-A tailored GitHub Actions workflow lives at `.github/workflows/ci.yml`. It runs on push to `master` and on every PR, and:
+A tailored GitHub Actions workflow lives at `.github/workflows/ci.yml`. It runs on push to `main` and on every PR, and:
 
-- sets up **Node 20** and the **.NET 10 SDK** (the workflow has to cover both stacks since the standard `nx g ci-workflow` only knows about Node),
+- sets up **Node 24** and the **.NET 10 SDK** (the workflow has to cover both stacks since the standard `nx g ci-workflow` only knows about Node),
 - caches `~/.nuget/packages` and `~/.cache/ms-playwright` alongside the built‑in `npm` cache,
 - runs `npx nx affected -t lint test build e2e-ci` — Nx skips projects that don't define a given target, so this single command covers Angular lint/test/build, .NET build (incl. the `^build` chain through `Demo.Domain`), and Playwright e2e,
 - uses [`nrwl/nx-set-shas`](https://github.com/marketplace/actions/nx-set-shas) to derive `NX_BASE`/`NX_HEAD` so `affected` works on push commits too.
