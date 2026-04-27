@@ -189,8 +189,8 @@ Fixed in this repo by configuring the plugin in `nx.json`:
 {
   "plugin": "@nx/dotnet",
   "options": {
-    "build": { "dependsOn": ["restore", "^build"] }
-  }
+    "build": { "dependsOn": ["restore", "^build"] },
+  },
 }
 ```
 
@@ -209,5 +209,3 @@ There's no shared-code path between TypeScript and C# — the boundary is HTTP. 
 - The directory is the **positional argument**, the project name is `--name`. Mixing them up generates the lib in the wrong place.
 - It does not support `--dry-run`.
 - Defaults to non-buildable. Pass `--buildable` only when you need an `ng-packagr` build target.
-
-END
