@@ -78,7 +78,7 @@ jobs:
       # command lints + tests Angular projects, builds Angular + .NET projects,
       # and runs Playwright e2e — all only for what actually changed.
       - name: Lint, test, build and e2e (affected)
-        run: npx nx affected -t lint test build e2e
+        run: npx nx affected -t lint test build e2e-ci
 
       # Nx Cloud's self-healing CI surfaces fix suggestions for failed tasks.
       # No-op when the workspace isn't connected to Nx Cloud yet.
