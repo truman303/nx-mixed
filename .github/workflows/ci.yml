@@ -17,6 +17,8 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
   # Use a workspace-local NuGet cache so actions/cache can pick it up
   NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+  # NX cloud access token
+  NX_CLOUD_ACCESS_TOKEN: ${{ secrets.NX_CLOUD_ACCESS_TOKEN }}
 
 jobs:
   main:
