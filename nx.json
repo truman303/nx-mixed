@@ -37,24 +37,11 @@
       "cache": true,
       "inputs": ["default", "^production"]
     },
-    "@nx/vitest:test": {
-      "cache": true,
-      "inputs": ["default", "^production"]
-    }
+    "@nx/vitest:test": { "cache": true, "inputs": ["default", "^production"] }
   },
   "plugins": [
-    {
-      "plugin": "@nx/playwright/plugin",
-      "options": {
-        "targetName": "e2e"
-      }
-    },
-    {
-      "plugin": "@nx/eslint/plugin",
-      "options": {
-        "targetName": "lint"
-      }
-    },
+    { "plugin": "@nx/playwright/plugin", "options": { "targetName": "e2e" } },
+    { "plugin": "@nx/eslint/plugin", "options": { "targetName": "lint" } },
     "@nx/dotnet"
   ],
   "generators": {
@@ -68,8 +55,7 @@
       "linter": "eslint",
       "unitTestRunner": "vitest-analog"
     },
-    "@nx/angular:component": {
-      "style": "css"
-    }
-  }
+    "@nx/angular:component": { "style": "css" }
+  },
+  "nxCloudId": "69ef3ad90391bad7093a1279"
 }
