@@ -169,3 +169,5 @@ Once connected you get **remote cache** out of the box (free tier). To also enab
 - [Run tasks](https://nx.dev/features/run-tasks) · [Inferred tasks](https://nx.dev/concepts/inferred-tasks) · [Module boundaries](https://nx.dev/features/enforce-module-boundaries)
 - [Nx Console (VSCode / JetBrains)](https://nx.dev/getting-started/editor-setup)
 - Community: [Discord](https://go.nx.dev/community) · [Blog](https://nx.dev/blog) · [YouTube](https://www.youtube.com/@nxdevtools)
+
+END
