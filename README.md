@@ -170,4 +170,42 @@ Once connected you get **remote cache** out of the box (free tier). To also enab
 - [Nx Console (VSCode / JetBrains)](https://nx.dev/getting-started/editor-setup)
 - Community: [Discord](https://go.nx.dev/community) · [Blog](https://nx.dev/blog) · [YouTube](https://www.youtube.com/@nxdevtools)
 
-END
+## Gotchas
+
+A running list of non-obvious things that have bitten us. Add to it when you hit a new one.
+
+### `@nx/dotnet` `build` doesn't restore by default
+
+The plugin infers the `build` target as `dotnet build --no-restore --no-dependencies` and does **not** make it `dependsOn: ["restore"]`. On a fresh clone (or in CI) you'll get:
+
+```text
+error NETSDK1004: Assets file '.../obj/project.assets.json' not found.
+Run a NuGet package restore to generate this file.
+```
+
+Fixed in this repo by configuring the plugin in `nx.json`:
+
+```jsonc
+{
+  "plugin": "@nx/dotnet",
+  "options": {
+    "build": { "dependsOn": ["restore", "^build"] },
+  },
+}
+```
+
+The plugin's options API only merges the canonical target names (`build`, `test`, `restore`, `clean`, `publish`, `pack`, `watch`, `run`). Variants like `build:release` are silently ignored if you put them in `options` — so `nx pack` (which depends on `build:release`) would still fail on a fresh clone. We don't run `pack` in CI today; if you wire it in, run `nx run-many -t restore` first or pre-build.
+
+### `nx affected -t … e2e` starts a dev server
+
+Playwright's `webServer` config boots `nx run demo-app:serve:development` as a continuous dependency of `demo-app-e2e:e2e`. You'll see a `serve` line and "Watch mode enabled" in the affected output — that's expected, it shuts down when the e2e run finishes (exit 130 in the CI logs).
+
+### The two stacks can't import each other
+
+There's no shared-code path between TypeScript and C# — the boundary is HTTP. See [Cross-stack](#cross-stack-angular-↔-net) for the three ways to keep DTOs in sync.
+
+### `@nx/angular:library` generator quirks
+
+- The directory is the **positional argument**, the project name is `--name`. Mixing them up generates the lib in the wrong place.
+- It does not support `--dry-run`.
+- Defaults to non-buildable. Pass `--buildable` only when you need an `ng-packagr` build target.
