@@ -127,7 +127,7 @@ The `@nx/eslint` plugin is already set up. As soon as you have ≥2 libs, add an
 "tags": ["scope:app"]                          // apps/*
 ```
 
-The .NET side is naturally isolated (no import path crosses the runtime boundary), but tagging keeps `nx graph` readable and lets you write rules like *"`scope:web` cannot depend on `scope:dotnet`"* for symmetry.
+The .NET side is naturally isolated (no import path crosses the runtime boundary), but tagging keeps `nx graph` readable and lets you write rules like _"`scope:web` cannot depend on `scope:dotnet`"_ for symmetry.
 
 ## Generators & plugins
 
@@ -141,12 +141,26 @@ Available out of the box: `@nx/angular`, `@nx/dotnet`, `@nx/eslint`, `@nx/playwr
 
 ## CI
 
+A tailored GitHub Actions workflow lives at `.github/workflows/ci.yml`. It runs on push to `master` and on every PR, and:
+
+- sets up **Node 20** and the **.NET 10 SDK** (the workflow has to cover both stacks since the standard `nx g ci-workflow` only knows about Node),
+- caches `~/.nuget/packages` and `~/.cache/ms-playwright` alongside the built‑in `npm` cache,
+- runs `npx nx affected -t lint test build e2e-ci` — Nx skips projects that don't define a given target, so this single command covers Angular lint/test/build, .NET build (incl. the `^build` chain through `Demo.Domain`), and Playwright e2e,
+- uses [`nrwl/nx-set-shas`](https://github.com/marketplace/actions/nx-set-shas) to derive `NX_BASE`/`NX_HEAD` so `affected` works on push commits too.
+
+### Hooking it up to Nx Cloud
+
 ```sh
-npx nx connect            # optional: Nx Cloud (remote cache, distribution, flaky detection)
-npx nx g ci-workflow      # generate a CI workflow for your provider
+# 1. Connect the workspace (interactive — opens a browser to claim the workspace)
+npx nx connect
+
+# 2. Commit the resulting `nxCloudId` in nx.json and push
+git add nx.json && git commit -m "chore: connect to Nx Cloud" && git push
 ```
 
-Use `npx nx affected -t build test lint` in CI to only run what changed.
+Once connected you get **remote cache** out of the box (free tier). To also enable **distributed task execution** (paid / trial), uncomment the `npx nx start-ci-run …` line near the top of `.github/workflows/ci.yml`.
+
+`npx nx fix-ci` at the end of the workflow is a no‑op until the workspace is connected; once it is, failed tasks get [self‑healing CI](https://nx.dev/ci/features/self-healing-ci) suggestions on the PR.
 
 ## Useful links
 
