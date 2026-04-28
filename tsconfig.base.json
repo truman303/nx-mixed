@@ -14,7 +14,7 @@
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
     "paths": {
-      "@nx-mixed/shared-ui": ["./libs/web/shared-ui/src/index.ts"]
+      "@nx-mixed/shared-ui": ["./libs/web/shared/ui/shared-ui/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

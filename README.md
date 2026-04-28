@@ -9,11 +9,19 @@ apps/
   demo-app/                  # Angular 21 (port 4200)
   demo-dotnet-api/           # ASP.NET minimal API (port 5039) → references Demo.Domain
 libs/
-  web/
-    shared-ui/               # Angular lib, imported via @nx-mixed/shared-ui
-  dotnet/
+  web/                       # TypeScript / Angular libs, scope:<product> in ESLint
+    <product>/               # one folder per product / domain (e.g. "shared", "katydid")
+      <module>/              # bounded context inside the product (e.g. "auth", "shell")
+        <type>/              # data-access | feature | ui | util
+          <lib-name>/
+    shared/
+      ui/
+        shared-ui/           # Angular lib, imported via @nx-mixed/shared-ui
+  dotnet/                    # .NET class libraries, scope:dotnet in ESLint
     Demo.Domain/             # .NET classlib, holds shared records (e.g. WeatherForecast)
 ```
+
+The top-level `web/` vs `dotnet/` split is the runtime boundary — TypeScript and C# can't share source, so it's also the package-manager boundary and the natural ESLint scope. Inside `libs/web/` the convention is the standard Nrwl `<product>/<module>/<type>/<name>` taxonomy. Inside `libs/dotnet/` we stay flat with PascalCase `Product.Module.Layer` folders that match `.csproj` naming.
 
 Existing edges (verify with `npx nx graph`):
 
@@ -52,12 +60,14 @@ The Angular dev server proxies `/api/*` → `http://localhost:5039` via `apps/de
 
 ## Adding an Angular library
 
+Place new libs under `libs/web/<product>/<module>/<type>/<name>/`. Pick `<product>` per app or domain (`shared` for cross-cutting libs), `<module>` per bounded context, and `<type>` from the standard Nrwl taxonomy: `data-access`, `feature`, `ui`, or `util`.
+
 The generator takes the **directory** as the positional argument and the project name via `--name`. It does not support `--dry-run`.
 
 ```sh
-npx nx g @nx/angular:library libs/web/<name> \
+npx nx g @nx/angular:library libs/web/<product>/<module>/<type>/<name> \
   --name=<name> \
-  --tags=scope:web,type:ui \
+  --tags=scope:<product>,type:<type> \
   --prefix=ui \
   --no-interactive
 ```
@@ -65,14 +75,14 @@ npx nx g @nx/angular:library libs/web/<name> \
 Concrete example used in this repo:
 
 ```sh
-npx nx g @nx/angular:library libs/web/shared-ui \
-  --name=shared-ui --tags=scope:web,type:ui --prefix=ui --no-interactive
+npx nx g @nx/angular:library libs/web/shared/ui/shared-ui \
+  --name=shared-ui --tags=scope:shared,type:ui --prefix=ui --no-interactive
 ```
 
 What the generator does:
 
-- Creates `libs/web/<name>/` with a `project.json`, sample standalone component, lint and test targets.
-- Adds a path alias to `tsconfig.base.json`: `"@nx-mixed/<name>": ["libs/web/<name>/src/index.ts"]`.
+- Creates the lib folder with a `project.json`, sample standalone component, lint and test targets.
+- Adds a path alias to `tsconfig.base.json`: `"@nx-mixed/<name>": ["libs/web/<product>/<module>/<type>/<name>/src/index.ts"]`.
 - No further wiring needed — apps and other libs can `import { ... } from '@nx-mixed/<name>'` immediately. Nx infers the dependency from the import.
 
 Defaults to **non‑buildable** (consumer's bundler compiles the source). Pass `--buildable` for an own `ng-packagr` build target, or `--publishable --import-path=@your-org/<name>` for npm publishing. Default to non‑buildable unless you have a reason.
@@ -118,16 +128,27 @@ You cannot share code between TypeScript and C#. Three options, increasing in ro
 
 ## Module boundaries
 
-The `@nx/eslint` plugin is already set up. As soon as you have ≥2 libs, add an `enforce-module-boundaries` rule to the root ESLint config and tag every project. Suggested taxonomy:
+The `@nx/eslint` plugin is already set up. As soon as you have ≥2 libs in `libs/web/`, add an `enforce-module-boundaries` rule to the root ESLint config and tag every project.
+
+Because the runtime boundary (`web/` vs `dotnet/`) is already encoded in the folder structure, `scope:` is **per product**, not per stack. Suggested taxonomy:
 
 ```jsonc
-"tags": ["scope:web",    "type:ui"]            // libs/web/shared-ui
-"tags": ["scope:web",    "type:data-access"]   // libs/web/api-client
-"tags": ["scope:dotnet", "type:domain"]        // libs/dotnet/Demo.Domain
-"tags": ["scope:app"]                          // apps/*
+"tags": ["scope:shared",  "type:ui"]            // libs/web/shared/ui/shared-ui
+"tags": ["scope:shared",  "type:data-access"]   // libs/web/shared/data-access/api-client
+"tags": ["scope:katydid", "type:feature"]       // libs/web/katydid/auth/feature/login-page
+"tags": ["scope:katydid", "type:data-access"]   // libs/web/katydid/auth/data-access/auth-api
+"tags": ["scope:dotnet",  "type:domain"]        // libs/dotnet/Demo.Domain
+"tags": ["scope:app"]                           // apps/*
 ```
 
-The .NET side is naturally isolated (no import path crosses the runtime boundary), but tagging keeps `nx graph` readable and lets you write rules like _"`scope:web` cannot depend on `scope:dotnet`"_ for symmetry.
+Typical rules to enforce:
+
+- `scope:<product>` may depend on `scope:shared` and itself, never on another product.
+- `type:feature` may depend on `type:data-access`, `type:ui`, `type:util`; the reverse is forbidden.
+- `type:ui` and `type:util` must not depend on `type:data-access` or `type:feature`.
+- `scope:web` (any web project) must not depend on `scope:dotnet`.
+
+The .NET side is naturally isolated (no import path crosses the runtime boundary), but tagging keeps `nx graph` readable and lets you write the cross-stack rule above for symmetry.
 
 ## Generators & plugins
 
